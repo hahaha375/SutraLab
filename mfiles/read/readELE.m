@@ -49,23 +49,27 @@ function [o,o2] = readELE(varargin)
   % ---------------- Parsing the line with node, element info-----------------
   o2.MeshInfo =getNextLine(fn,'criterion','equal','keyword','## ');
   o2.MeshInfo(1)
-  if strcmpi(o2.MeshInfo(4:6),'2-D')
-    tmp=regexprep(o2.MeshInfo,{'#','(',')','\,','*','='},{'','','','','',''});
-    tmp=textscan(tmp,'%s %s %s %f %f %f %*s %f %*s');
-    % how to realize this by one-liner
-    %  [o2.mshtyp{1} o2.mshtyp{2} ] = deal(tmp{1:2}{1});
-    o2.mshtyp{1}                    = tmp{1}{1};
-    o2.mshtyp{2}                    = tmp{2}{1};
-    [o2.nn1,o2.nn2,o2.ne,o2.nn ]    = deal(tmp{4:7});
-  elseif strcmpi(o2.MeshInfo(4:6),'3-D')
-    tmp=regexprep(o2.MeshInfo,{'#','(',')','\,','*','='},{'','','','','',''});
-    tmp2=textscan(tmp,'%s %s %s %f %f %f %f %*s %f %*s');
-    o2.mshtyp{1}                    = tmp2{1}{1};
-    o2.mshtyp{2}                    = tmp2{2}{1};
-    [o2.nn1,o2.nn2,o2.nn3,o2.ne,o2.nn ]    = deal(tmp2{4:8});    
+  tmp=regexprep(o2.MeshInfo,{'#','(',')','\,','*','='},{'','','','','',''});
+  tmp2=textscan(tmp,'%s %s %s ');
+  if strcmp(tmp2{1}{1},'2-D') && strcmp(tmp2{2}{1},'REGULAR')
+      tmp=textscan(tmp,'%s %s %s %f %f %f %*s %f %*s');
+      % how to realize this by one-liner
+      %  [o2.mshtyp{1} o2.mshtyp{2} ] = deal(tmp{1:2}{1});
+      [o2.nn1,o2.nn2,o2.ne,o2.nn ]    = deal(tmp{4:7});
+  elseif strcmp(tmp2{1}{1},'2-D') && strcmp(tmp2{2}{1},'IRREGULAR')
+      tmp=textscan(tmp,'%s %s %s %f %s %f %s ');
+      [o2.nn ]    = deal(tmp{4});
+  elseif strcmp(tmp2{1}{1},'3-D') && strcmp(tmp2{2}{1},'BLOCKWISE')
+      tmp=textscan(tmp,'%s %s %s %f %f %f %f %*s %f %*s');
+      [o2.nn1,o2.nn2,o2.nn3,o2.nn,o2.ne ]    = deal(tmp{4:8});
+  elseif strcmp(tmp2{1}{1},'3-D') && strcmp(tmp2{2}{1},'LAYERED')
+      tmp=textscan(tmp,'%s %s %s %s %f %f %f %*s %f %*s');
+      [o2.nn1,o2.nn2,o2.nn3,o2.nn,o2.ne ]    = deal(tmp{4:8});
   end
-      
-      
+  o2.mshtyp{1}                    = tmp2{1}{1};
+  o2.mshtyp{2}                    = tmp2{2}{1};
+
+
   % ---------------- parsing the number of results    ------------------------
   tmp = getNextLine(fn,'criterion','with','keyword',...
                  '## VELOCITY RESULTS','operation','delete');
