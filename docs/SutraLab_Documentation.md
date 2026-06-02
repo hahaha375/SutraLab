@@ -11,11 +11,11 @@
 2. [Requirements & Setup](#2-requirements--setup)
 3. [Directory Structure](#3-directory-structure)
 4. [Quick Start](#4-quick-start)
-5. [Core Read Functions](#5-core-read-functions)
+5. [Core Read Functions](#5-core-read-functions) — `readNOD`, `readELE`, `readBCOP`, `readBCOF`, `readFIL`, `readINP`, `readNOD_Ms`, `readELE_Ms`
 6. [Object-Oriented Interface](#6-object-oriented-interface)
 7. [Supported Mesh Types](#7-supported-mesh-types)
 8. [Soil Property Models](#8-soil-property-models)
-9. [Visualization & Example Cases](#9-visualization--example-cases)
+9. [Visualization & Example Cases](#9-visualization--example-cases) — Henry, Island2D, 2D irregular mesh, 3D Tecplot export, SWCC/Kr
 10. [Coding Conventions](#10-coding-conventions)
 
 **中文**
@@ -23,11 +23,11 @@
 2. [环境要求与安装](#2-环境要求与安装)
 3. [目录结构](#3-目录结构)
 4. [快速入门](#4-快速入门)
-5. [核心读取函数](#5-核心读取函数)
+5. [核心读取函数](#5-核心读取函数) — `readNOD`、`readELE`、`readBCOP`、`readBCOF`、`readFIL`、`readINP`、`readNOD_Ms`、`readELE_Ms`
 6. [面向对象接口](#6-面向对象接口)
 7. [支持的网格类型](#7-支持的网格类型)
 8. [土壤特性模型](#8-土壤特性模型)
-9. [可视化与示例案例](#9-可视化与示例案例)
+9. [可视化与示例案例](#9-可视化与示例案例) — Henry、Island2D、二维不规则网格、三维 Tecplot 导出、SWCC/Kr
 10. [代码规范](#10-代码规范)
 
 ---
@@ -83,12 +83,13 @@ SutraLab/
 │   │   └── ...
 │   ├── read/                          # I/O functions and OOP wrappers
 │   │   ├── readNOD.m                  # Read .NOD nodewise results
-│   │   ├── readNOD_Ms.m               # Read .NOD (multi-source variant)
+│   │   ├── readNOD_Ms.m               # Read .NOD for SUTRAMS simulations
 │   │   ├── readELE.m                  # Read .ELE element results
+│   │   ├── readELE_Ms.m               # Read .ELE for SUTRAMS simulations
 │   │   ├── readBCOP.m                 # Read .BCOP pressure BC output
 │   │   ├── readBCOF.m                 # Read .BCOF fluid source output
 │   │   ├── readFIL.m                  # Read SUTRA.FIL file list
-│   │   ├── readINP.m                  # Read .INP input file (mesh info)
+│   │   ├── readINP.m                  # Read .INP input file (mesh + connectivity)
 │   │   ├── @nodObj/                   # OOP wrapper for NOD data
 │   │   ├── @eleObj/                   # OOP wrapper for ELE data
 │   │   ├── @bcofObj/                  # OOP wrapper for BCOF data
@@ -111,6 +112,12 @@ SutraLab/
 │   │   └── 2D/
 │   │       ├── Henry/                 # Henry saltwater intrusion benchmark
 │   │       └── Island2D/              # Island freshwater lens benchmark
+│   ├── plot_2DAquiferwithSlope/       # 2D irregular-mesh connectivity plot example
+│   │   ├── sutra2Dplot.m              #   plotting script (patch-based)
+│   │   ├── SUTRAkuansmodel2D.inp      #   example .INP file
+│   │   └── SUTRAkuansmodel2D.nod     #   example .NOD file
+│   ├── plot_3DAquiferwithSlope/       # 3D result export to Tecplot format
+│   │   └── Sutra2tecplot3D.m
 │   ├── plot_swcc_kr_carsel1988/       # SWCC/Kr plots for Carsel (1988) soils
 │   ├── plot_swcc_kr_marsh/            # SWCC/Kr plots for Marsh (2012) soils
 │   ├── Sutra_adsorption/              # Adsorption model examples
@@ -141,23 +148,56 @@ bcop = readBCOP(fil.basename);   % specified-pressure BC output
 bcof = readBCOF(fil.basename);   % fluid source/sink output
 ```
 
-**Step 4 — Access data**
+**Step 4 — Access data and plot**
+
+*Option A — Structured (2-D REGULAR) mesh: reshape and contour*
 ```matlab
 % Find column indices by label
 c_idx = strcmp(nod(1).label, 'Concentration');
 x_idx = strcmp(nod(1).label, 'X');
 y_idx = strcmp(nod(1).label, 'Y');
 
-% Reshape 1D array into 2D spatial matrix (2-D REGULAR mesh)
+% Reshape 1D array into 2D spatial matrix
 c_matrix = reshape(nod(end).terms{c_idx}, [inp.nn1, inp.nn2]);
 x_matrix = reshape(nod(1).terms{x_idx},   [inp.nn1, inp.nn2]);
 y_matrix = reshape(nod(1).terms{y_idx},   [inp.nn1, inp.nn2]);
 
-% Plot
 contourf(x_matrix, y_matrix, c_matrix);
 colormap(jet); colorbar;
 xlabel('x (m)'); ylabel('y (m)');
 ```
+
+*Option B — Unstructured (2-D IRREGULAR) mesh: connectivity-based patch plot*
+
+For arbitrarily shaped domains the element connectivity from `readINP` drives plotting
+directly — no interpolation to a regular grid is needed.
+
+```matlab
+inp = readINP(basename);   % loads element connectivity (Data Set 22)
+nod = readNOD(basename);
+
+n     = numel(nod);                              % last time step
+x_id  = strcmp(nod(n).label, 'X');
+z_id  = strcmp(nod(n).label, 'Y');
+c_id  = strcmp(nod(n).label, 'Concentration');
+
+xa  = nod(n).terms{x_id};
+za  = nod(n).terms{z_id};
+con = nod(n).terms{c_id};
+
+% Build Faces matrix from Data Set 22 (columns 2–5 are the 4 node indices)
+connectivity = [inp.ds22{1,2}, inp.ds22{1,3}, inp.ds22{1,4}, inp.ds22{1,5}];
+
+figure('Color','w');
+patch('Faces', connectivity, 'Vertices', [xa, za], ...
+      'FaceVertexCData', con, 'FaceColor', 'interp', 'EdgeColor', 'none');
+colormap(jet); colorbar;
+xlabel('x (m)'); ylabel('y (m)');
+```
+
+> **Why connectivity plotting?** `patch` renders each quadrilateral element directly
+> using the node coordinates stored in the `.INP` file. This works for any mesh shape
+> — slopes, irregular boundaries, variable resolution — without any grid interpolation.
 
 ---
 
@@ -235,16 +275,59 @@ fil = readFIL('path/to/SUTRA.FIL')
 
 Returns a struct with `.basename` — the project name used for all other read calls.
 
-### 5.6 `readINP` — Input file mesh structure
+### 5.6 `readINP` — Input file mesh structure and connectivity
 
 ```matlab
-inp2 = readINP(basename)
+inp = readINP(basename)
 ```
 
 Parses the `.INP` file to extract:
 - `.meshtype` — mesh dimension and type
 - `.nn`, `.ne`, `.np`, `.nc`, `.nf`, `.ns`, `.no` — Data Set 3 counts
-- `.ds22` — element incidence table (Data Set 22); 5 columns for 2-D, 9 for 3-D
+- `.ds22` — element incidence table (Data Set 22); columns 2–5 are node indices for
+  2-D quadrilateral elements; columns 2–9 for 3-D brick elements
+
+**Connectivity-based plotting for irregular 2-D models:**
+
+`readINP` is the key enabler for plotting results on arbitrarily shaped 2-D domains.
+By passing `inp.ds22` as the `Faces` argument to MATLAB's `patch()`, results are
+visualised element-by-element with no interpolation step, preserving the exact
+domain geometry including sloping boundaries and variable-resolution meshes.
+
+```matlab
+inp = readINP('mymodel');
+nod = readNOD('mymodel');
+connectivity = [inp.ds22{1,2}, inp.ds22{1,3}, inp.ds22{1,4}, inp.ds22{1,5}];
+xa  = nod(end).terms{strcmp(nod(end).label,'X')};
+za  = nod(end).terms{strcmp(nod(end).label,'Y')};
+con = nod(end).terms{strcmp(nod(end).label,'Concentration')};
+patch('Faces', connectivity, 'Vertices', [xa, za], ...
+      'FaceVertexCData', con, 'FaceColor', 'interp', 'EdgeColor', 'none');
+colormap(jet); colorbar;
+```
+
+For 3-D models, the same connectivity approach exports data to Tecplot format
+(see `example/plot_3DAquiferwithSlope/Sutra2tecplot3D.m`).
+
+### 5.7 `readNOD_Ms` and `readELE_Ms` — SUTRAMS output readers
+
+```matlab
+[nod, nod2] = readNOD_Ms(basename)
+[nod, nod2] = readNOD_Ms(basename, 'outputnumber', N)
+
+[ele, ele2] = readELE_Ms(basename)
+[ele, ele2] = readELE_Ms(basename, 'outputnumber', N)
+```
+
+These are purpose-built variants for reading output from **SUTRAMS** simulations.
+SUTRAMS uses a slightly different header format from standard SUTRA (the keyword
+`## NODEWISERESULTS` has no space, and `## VELOCITYRESULTS` similarly), so the
+standard `readNOD`/`readELE` parsers cannot locate those header lines. Use
+`readNOD_Ms` / `readELE_Ms` whenever your simulation was run with SUTRAMS.
+
+Both functions support all five mesh types (2-D REGULAR, 2-D IRREGULAR,
+3-D REGULAR, 3-D BLOCKWISE, 3-D LAYERED) and return the same struct format
+as their standard counterparts.
 
 ---
 
@@ -457,7 +540,59 @@ Simulates a freshwater lens on a small island surrounded by seawater. Demonstrat
 
 Plots generated follow the same pattern as Henry but show the symmetric lens shape.
 
-### 9.4 SWCC and relative permeability plots
+### 9.4 2-D Irregular-mesh connectivity plot
+
+**Location:** `example/plot_2DAquiferwithSlope/`
+
+Demonstrates connectivity-based plotting for a 2-D model with a sloping boundary —
+a geometry that cannot be represented by a regular rectangular grid.
+
+```matlab
+cd('example/plot_2DAquiferwithSlope')
+run('sutra2Dplot.m')
+```
+
+`sutra2Dplot.m` reads `SUTRAkuansmodel2D.inp` and `SUTRAkuansmodel2D.nod`, builds
+the connectivity matrix from Data Set 22, then calls `patch()` to render
+concentration contours on the actual unstructured mesh. No interpolation is needed.
+
+**Key pattern:**
+```matlab
+dataINP = readINP('SUTRAkuansmodel2D');
+dataNOD = readNOD('SUTRAkuansmodel2D');
+n   = numel(dataNOD);
+xa  = dataNOD(n).terms{strcmp(dataNOD(n).label,'X')};
+za  = dataNOD(n).terms{strcmp(dataNOD(n).label,'Y')};
+con = dataNOD(n).terms{strcmp(dataNOD(n).label,'Concentration')};
+connectivity = [dataINP.ds22{1,2}, dataINP.ds22{1,3}, ...
+                dataINP.ds22{1,4}, dataINP.ds22{1,5}];
+patch('Faces', connectivity, 'Vertices', [xa, za], ...
+      'FaceVertexCData', con, 'FaceColor', 'interp', 'EdgeColor', 'none');
+colormap(jet);
+```
+
+### 9.5 3-D result export to Tecplot
+
+**Location:** `example/plot_3DAquiferwithSlope/`
+
+`Sutra2tecplot3D.m` reads a 3-D SUTRA simulation, assembles node coordinates,
+concentration, pressure, saturation (and optionally velocity) into an `FEPOINT`
+brick-format `.dat` file, then calls `preplot` to produce a Tecplot-ready `.plt`
+binary.
+
+```matlab
+cd('example/plot_3DAquiferwithSlope')
+% Edit filename variable inside the script, then:
+run('Sutra2tecplot3D.m')   % writes <filename>.plt
+```
+
+The element connectivity for 3-D brick elements uses all 8 columns from `inp.ds22`.
+
+> **Note:** Requires Tecplot and its `preplot` utility to be installed and on the
+> system PATH for the final `preplot` / `del` system calls to succeed. The `.dat`
+> intermediate file is otherwise valid for import into any Tecplot-compatible viewer.
+
+### 9.6 SWCC and relative permeability plots
 
 **Location:** `example/plot_swcc_kr_carsel1988/` and `example/plot_swcc_kr_marsh/`
 
@@ -528,12 +663,13 @@ SutraLab/
 │   ├── etc/                           # 内部解析工具函数
 │   ├── read/                          # I/O 函数及面向对象封装
 │   │   ├── readNOD.m                  # 读取节点结果 .NOD
-│   │   ├── readNOD_Ms.m               # 读取 .NOD（多源变体）
+│   │   ├── readNOD_Ms.m               # 读取 SUTRAMS 节点结果 .NOD
 │   │   ├── readELE.m                  # 读取单元结果 .ELE
+│   │   ├── readELE_Ms.m               # 读取 SUTRAMS 单元结果 .ELE
 │   │   ├── readBCOP.m                 # 读取压力边界输出 .BCOP
 │   │   ├── readBCOF.m                 # 读取流量源汇输出 .BCOF
 │   │   ├── readFIL.m                  # 读取 SUTRA.FIL 文件列表
-│   │   ├── readINP.m                  # 读取输入文件网格信息 .INP
+│   │   ├── readINP.m                  # 读取输入文件网格信息及连接关系 .INP
 │   │   ├── @nodObj/                   # NOD 数据的面向对象封装
 │   │   ├── @eleObj/                   # ELE 数据的面向对象封装
 │   │   ├── @bcofObj/                  # BCOF 数据的封装
@@ -552,6 +688,12 @@ SutraLab/
 │   ├── SUTRA_examples/2D/
 │   │   ├── Henry/                     # Henry 盐水入侵基准算例
 │   │   └── Island2D/                  # 岛屿淡水透镜体基准算例
+│   ├── plot_2DAquiferwithSlope/       # 二维不规则网格连接关系绘图示例
+│   │   ├── sutra2Dplot.m              #   绘图脚本（patch 方式）
+│   │   ├── SUTRAkuansmodel2D.inp      #   示例 .INP 文件
+│   │   └── SUTRAkuansmodel2D.nod     #   示例 .NOD 文件
+│   ├── plot_3DAquiferwithSlope/       # 三维结果导出为 Tecplot 格式
+│   │   └── Sutra2tecplot3D.m
 │   ├── plot_swcc_kr_carsel1988/       # Carsel (1988) 土壤 SWCC/Kr 图
 │   ├── plot_swcc_kr_marsh/            # Marsh (2012) 土壤 SWCC/Kr 图
 │   ├── Sutra_adsorption/              # 吸附模型示例
@@ -582,23 +724,56 @@ bcop = readBCOP(fil.basename);   % 指定压力边界输出
 bcof = readBCOF(fil.basename);   % 流体源汇输出
 ```
 
-**第四步 — 访问数据**
+**第四步 — 访问数据并绘图**
+
+*方案 A — 结构化网格（2-D REGULAR）：矩阵重塑 + 等值线*
 ```matlab
 % 按标签名查找列索引
 c_idx = strcmp(nod(1).label, 'Concentration');
 x_idx = strcmp(nod(1).label, 'X');
 y_idx = strcmp(nod(1).label, 'Y');
 
-% 将一维数组重塑为二维空间矩阵（适用于 2-D REGULAR 网格）
+% 将一维数组重塑为二维空间矩阵
 c_matrix = reshape(nod(end).terms{c_idx}, [inp.nn1, inp.nn2]);
 x_matrix = reshape(nod(1).terms{x_idx},   [inp.nn1, inp.nn2]);
 y_matrix = reshape(nod(1).terms{y_idx},   [inp.nn1, inp.nn2]);
 
-% 绘图
 contourf(x_matrix, y_matrix, c_matrix);
 colormap(jet); colorbar;
 xlabel('x (m)'); ylabel('y (m)');
 ```
+
+*方案 B — 非结构化网格（2-D IRREGULAR）：基于单元连接关系的 patch 绘图*
+
+对于任意形状的模型区域，可直接利用 `readINP` 读取的单元连接关系进行绘图，
+无需对不规则网格进行插值重采样。
+
+```matlab
+inp = readINP(basename);   % 读取单元连接关系（Data Set 22）
+nod = readNOD(basename);
+
+n     = numel(nod);                              % 最后一个时间步
+x_id  = strcmp(nod(n).label, 'X');
+z_id  = strcmp(nod(n).label, 'Y');
+c_id  = strcmp(nod(n).label, 'Concentration');
+
+xa  = nod(n).terms{x_id};
+za  = nod(n).terms{z_id};
+con = nod(n).terms{c_id};
+
+% 从 Data Set 22 第 2–5 列提取节点编号，构建 Faces 矩阵
+connectivity = [inp.ds22{1,2}, inp.ds22{1,3}, inp.ds22{1,4}, inp.ds22{1,5}];
+
+figure('Color','w');
+patch('Faces', connectivity, 'Vertices', [xa, za], ...
+      'FaceVertexCData', con, 'FaceColor', 'interp', 'EdgeColor', 'none');
+colormap(jet); colorbar;
+xlabel('x (m)'); ylabel('y (m)');
+```
+
+> **为什么要用连接关系绘图？** `patch` 函数直接按照 `.INP` 文件中存储的节点坐标
+> 逐单元渲染四边形，适用于任意网格形状——含坡度边界、不规则边界、变分辨率网格——
+> 无需任何网格插值操作。
 
 ---
 
@@ -676,16 +851,53 @@ fil = readFIL('path/to/SUTRA.FIL')
 
 返回包含 `.basename` 字段的结构体，供其他读取函数使用。
 
-### 5.6 `readINP` — 输入文件网格结构
+### 5.6 `readINP` — 输入文件网格结构与单元连接关系
 
 ```matlab
-inp2 = readINP(basename)
+inp = readINP(basename)
 ```
 
 解析 `.INP` 文件，提取：
 - `.meshtype` — 网格维度和类型
 - `.nn`、`.ne`、`.np`、`.nc`、`.nf`、`.ns`、`.no` — Data Set 3 中的计数
-- `.ds22` — 单元关联表（Data Set 22）；二维网格为 5 列，三维为 9 列
+- `.ds22` — 单元关联表（Data Set 22）；第 2–5 列为二维四边形单元的节点编号；三维砖形单元则使用第 2–9 列
+
+**用于不规则二维模型的连接关系绘图：**
+
+`readINP` 是在任意形状二维模型上进行结果可视化的关键函数。将 `inp.ds22` 作为
+`patch()` 的 `Faces` 参数传入，即可逐单元渲染结果，无需插值，完整保留含坡面、不规则边界的模型几何形态。
+
+```matlab
+inp = readINP('mymodel');
+nod = readNOD('mymodel');
+connectivity = [inp.ds22{1,2}, inp.ds22{1,3}, inp.ds22{1,4}, inp.ds22{1,5}];
+xa  = nod(end).terms{strcmp(nod(end).label,'X')};
+za  = nod(end).terms{strcmp(nod(end).label,'Y')};
+con = nod(end).terms{strcmp(nod(end).label,'Concentration')};
+patch('Faces', connectivity, 'Vertices', [xa, za], ...
+      'FaceVertexCData', con, 'FaceColor', 'interp', 'EdgeColor', 'none');
+colormap(jet); colorbar;
+```
+
+三维模型可使用同样的连接关系将结果导出为 Tecplot 格式（参见 `example/plot_3DAquiferwithSlope/Sutra2tecplot3D.m`）。
+
+### 5.7 `readNOD_Ms` 和 `readELE_Ms` — SUTRAMS 输出读取器
+
+```matlab
+[nod, nod2] = readNOD_Ms(basename)
+[nod, nod2] = readNOD_Ms(basename, 'outputnumber', N)
+
+[ele, ele2] = readELE_Ms(basename)
+[ele, ele2] = readELE_Ms(basename, 'outputnumber', N)
+```
+
+这两个函数专为读取 **SUTRAMS** 模拟输出文件而设计。SUTRAMS 的文件头格式与标准 SUTRA 略有差异
+（关键字为 `## NODEWISERESULTS` 无空格，以及 `## VELOCITYRESULTS` 同样无空格），
+标准的 `readNOD`/`readELE` 无法定位这些文件头行，因此凡使用 SUTRAMS 运行的模拟，
+必须使用 `readNOD_Ms` / `readELE_Ms` 进行读取。
+
+两个函数均支持全部五种网格类型（2-D REGULAR、2-D IRREGULAR、3-D REGULAR、
+3-D BLOCKWISE、3-D LAYERED），返回值格式与标准读取函数完全相同。
 
 ---
 
@@ -876,7 +1088,54 @@ run('sl_analyze.m')
 
 模拟海岛上淡水透镜体的发育过程，展示 Ghyben-Herzberg 透镜体随时间的演化。绘图模式与 Henry 算例相同。
 
-### 9.4 SWCC 和相对渗透率图
+### 9.4 二维不规则网格连接关系绘图
+
+**位置：** `example/plot_2DAquiferwithSlope/`
+
+演示如何对含坡面边界的二维模型进行连接关系绘图——该几何形状无法用规则矩形网格表示。
+
+```matlab
+cd('example/plot_2DAquiferwithSlope')
+run('sutra2Dplot.m')
+```
+
+`sutra2Dplot.m` 读取 `SUTRAkuansmodel2D.inp` 和 `SUTRAkuansmodel2D.nod`，
+从 Data Set 22 构建连接矩阵，然后调用 `patch()` 在实际非结构网格上渲染浓度云图，无需任何插值操作。
+
+**核心代码：**
+```matlab
+dataINP = readINP('SUTRAkuansmodel2D');
+dataNOD = readNOD('SUTRAkuansmodel2D');
+n   = numel(dataNOD);
+xa  = dataNOD(n).terms{strcmp(dataNOD(n).label,'X')};
+za  = dataNOD(n).terms{strcmp(dataNOD(n).label,'Y')};
+con = dataNOD(n).terms{strcmp(dataNOD(n).label,'Concentration')};
+connectivity = [dataINP.ds22{1,2}, dataINP.ds22{1,3}, ...
+                dataINP.ds22{1,4}, dataINP.ds22{1,5}];
+patch('Faces', connectivity, 'Vertices', [xa, za], ...
+      'FaceVertexCData', con, 'FaceColor', 'interp', 'EdgeColor', 'none');
+colormap(jet);
+```
+
+### 9.5 三维结果导出为 Tecplot 格式
+
+**位置：** `example/plot_3DAquiferwithSlope/`
+
+`Sutra2tecplot3D.m` 读取三维 SUTRA 模拟结果，将节点坐标、浓度、压力、饱和度（以及可选的速度场）
+组装为 `FEPOINT` 砖形格式的 `.dat` 文件，然后调用 `preplot` 生成 Tecplot 可读的 `.plt` 二进制文件。
+
+```matlab
+cd('example/plot_3DAquiferwithSlope')
+% 修改脚本内的 filename 变量，然后运行：
+run('Sutra2tecplot3D.m')   % 生成 <filename>.plt
+```
+
+三维砖形单元的连接关系使用 `inp.ds22` 的全部 8 列节点编号。
+
+> **注意：** 最终的 `preplot` / `del` 系统调用需要 Tecplot 及其 `preplot` 工具已安装并在系统路径中。
+> 生成的 `.dat` 中间文件本身是合法的文本格式，可导入任何兼容 Tecplot 格式的可视化软件。
+
+### 9.6 SWCC 和相对渗透率图
 
 **位置：** `example/plot_swcc_kr_carsel1988/` 和 `example/plot_swcc_kr_marsh/`
 
