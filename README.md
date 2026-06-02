@@ -1,6 +1,8 @@
 # SutraLab
 Post-process code for USGS-SUTRA
 
+**Full documentation:** [docs/SutraLab_Documentation.md](docs/SutraLab_Documentation.md)
+
 IMPLIMENTED FUNCTIONS:
 ------------------------------------------------------------------------------------------------
 

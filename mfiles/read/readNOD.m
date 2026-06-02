@@ -61,6 +61,17 @@ function [o,o2]=readNOD(varargin)
   elseif strcmp(o2.mshtyp{1},'3-D') && strcmp(o2.mshtyp{2},'REGULAR')
     tmp=textscan(tmp,'%s %s %s %f %f %f %f %*s %f %*s');
     [o2.nn3,o2.nn2,o2.nn1,o2.nn,o2.ne ]    = deal(tmp{4:8});
+  elseif strcmp(o2.mshtyp{1},'2-D') && strcmp(o2.mshtyp{2},'IRREGULAR')
+    tmp=textscan(tmp,'%s %s %s %f %s %f %s ');
+    [o2.nn]    = deal(tmp{4});
+  elseif strcmp(o2.mshtyp{1},'3-D') && strcmp(o2.mshtyp{2},'BLOCKWISE')
+    tmp=textscan(tmp,'%s %s %s %f %f %f %f %*s %f %*s');
+    [o2.nn1,o2.nn2,o2.nn3,o2.nn,o2.ne ]    = deal(tmp{4:8});
+  elseif strcmp(o2.mshtyp{1},'3-D') && strcmp(o2.mshtyp{2},'LAYERED')
+    tmp=textscan(tmp,'%s %s %s %s %f %f %f %*s %f %*s');
+    [o2.nn1,o2.nn2,o2.nn3,o2.nn,o2.ne ]    = deal(tmp{4:8});
+  else
+    fprintf('SUTRA inp file needs correction!');
   end
   % ---------------- parsing the number of results    ------------------------
   tmp = getNextLine(fn,'criterion','with','keyword',...
